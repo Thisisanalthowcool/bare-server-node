@@ -12,6 +12,7 @@ import { Readable, type Duplex } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import createHttpError from 'http-errors';
 import type WebSocket from 'ws';
+// @internal
 import type { JSONDatabaseAdapter } from './Meta.js';
 import { nullMethod } from './requestUtil.js';
 
@@ -37,7 +38,7 @@ export class BareError extends Error {
 }
 
 export const pkg = JSON.parse(
-	readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')
+	readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'),
 ) as { version: string };
 
 const project: BareProject = {
@@ -116,8 +117,8 @@ export interface Options {
 		callback: (
 			err: NodeJS.ErrnoException | null,
 			address: string,
-			family: number
-		) => void
+			family: number,
+		) => void,
 	) => void;
 	localAddress?: string;
 	family?: number;
@@ -131,14 +132,14 @@ export interface Options {
 export type RouteCallback = (
 	request: BareRequest,
 	response: ServerResponse<IncomingMessage>,
-	options: Options
+	options: Options,
 ) => Promise<Response> | Response;
 
 export type SocketRouteCallback = (
 	request: BareRequest,
 	socket: Duplex,
 	head: Buffer,
-	options: Options
+	options: Options,
 ) => Promise<void> | void;
 
 export default class Server extends EventEmitter {
@@ -190,7 +191,7 @@ export default class Server extends EventEmitter {
 		request.native = req;
 
 		const service = new URL(request.url).pathname.slice(
-			this.directory.length - 1
+			this.directory.length - 1,
 		);
 
 		if (this.socketRoutes.has(service)) {
@@ -214,12 +215,13 @@ export default class Server extends EventEmitter {
 			method: req.method,
 			body: nullMethod.includes(req.method || '') ? undefined : req,
 			headers: req.headers as HeadersInit,
+			duplex: 'half',
 		}) as BareRequest;
 
 		request.native = req;
 
 		const service = new URL(request.url).pathname.slice(
-			this.directory.length - 1
+			this.directory.length - 1,
 		);
 		let response: Response;
 
@@ -266,7 +268,7 @@ export default class Server extends EventEmitter {
 						'Cannot',
 						request.method,
 						new URL(request.url).pathname,
-						': Route did not return a response.'
+						': Route did not return a response.',
 					);
 				}
 
@@ -286,7 +288,7 @@ export default class Server extends EventEmitter {
 		res.writeHead(
 			response.status,
 			response.statusText,
-			Object.fromEntries(response.headers)
+			Object.fromEntries(response.headers),
 		);
 
 		if (response.body) {

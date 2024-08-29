@@ -18,12 +18,25 @@ import type { BareHeaders } from './requestUtil.js';
 import { bareFetch, bareUpgradeFetch, randomHex } from './requestUtil.js';
 import type { BareV1Meta, BareV1MetaRes } from './V1Types.js';
 
+const forbiddenSendHeaders = [
+	'connection',
+	'content-length',
+	'transfer-encoding',
+];
+
+const forbiddenForwardHeaders: string[] = [
+	'connection',
+	'transfer-encoding',
+	'origin',
+	'referer',
+];
+
 const validProtocols: string[] = ['http:', 'https:', 'ws:', 'wss:'];
 
 function loadForwardedHeaders(
 	forward: string[],
 	target: BareHeaders,
-	request: BareRequest
+	request: BareRequest,
 ) {
 	for (const header of forward) {
 		const value = request.headers.get(header);
@@ -89,6 +102,8 @@ function readHeaders(request: BareRequest): BareHeaderData {
 		const json = JSON.parse(xBareHeaders) as Record<string, string | string[]>;
 
 		for (const header in json) {
+			if (forbiddenSendHeaders.includes(header.toLowerCase())) continue;
+
 			const value = json[header];
 
 			if (typeof value === 'string') {
@@ -139,7 +154,18 @@ function readHeaders(request: BareRequest): BareHeaderData {
 		});
 
 	try {
-		loadForwardedHeaders(JSON.parse(xBareForwardHeaders), headers, request);
+		const parsed = JSON.parse(xBareForwardHeaders);
+		const forwardHeaders: string[] = [];
+
+		for (let header of parsed) {
+			header = header.toLowerCase();
+
+			// just ignore
+			if (forbiddenForwardHeaders.includes(header)) continue;
+			forwardHeaders.push(header);
+		}
+
+		loadForwardedHeaders(forwardHeaders, headers, request);
 	} catch (error) {
 		throw new BareError(400, {
 			code: 'INVALID_BARE_HEADER',
@@ -171,7 +197,7 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		abort.signal,
 		headers,
 		remote,
-		options
+		options,
 	);
 
 	const responseHeaders = new Headers();
@@ -180,12 +206,12 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		if (header === 'content-encoding' || header === 'x-content-encoding')
 			responseHeaders.set(
 				'content-encoding',
-				flattenHeader(response.headers[header]!)
+				flattenHeader(response.headers[header]!),
 			);
 		else if (header === 'content-length')
 			responseHeaders.set(
 				'content-length',
-				flattenHeader(response.headers[header]!)
+				flattenHeader(response.headers[header]!),
 			);
 	}
 
@@ -194,8 +220,8 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		JSON.stringify(
 			mapHeadersFromArray(rawHeaderNames(response.rawHeaders), {
 				...(<BareHeaders>response.headers),
-			})
-		)
+			}),
+		),
 	);
 
 	responseHeaders.set('x-bare-status', response.statusCode!.toString());
@@ -255,7 +281,7 @@ const tunnelSocket: SocketRouteCallback = async (
 	request,
 	socket,
 	head,
-	options
+	options,
 ) => {
 	const abort = new AbortController();
 
@@ -295,7 +321,7 @@ const tunnelSocket: SocketRouteCallback = async (
 		abort.signal,
 		headers,
 		remoteToURL(remote),
-		options
+		options,
 	);
 
 	remoteSocket.on('close', () => {
@@ -331,7 +357,7 @@ const tunnelSocket: SocketRouteCallback = async (
 					rawHeaderNames(remoteResponse.rawHeaders),
 					{
 						...(<BareHeaders>remoteResponse.headers),
-					}
+					},
 				),
 			};
 			await options.database.set(id, meta);
@@ -348,7 +374,7 @@ const tunnelSocket: SocketRouteCallback = async (
 
 	if ('sec-websocket-extensions' in remoteResponse.headers) {
 		responseHeaders.push(
-			`Sec-WebSocket-Extensions: ${remoteResponse.headers['sec-websocket-extensions']}`
+			`Sec-WebSocket-Extensions: ${remoteResponse.headers['sec-websocket-extensions']}`,
 		);
 	}
 

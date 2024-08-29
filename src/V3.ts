@@ -19,11 +19,16 @@ import { bareFetch, nullBodyStatus, webSocketFetch } from './requestUtil.js';
 import { joinHeaders, splitHeaders } from './splitHeaderUtil.js';
 import type { SocketClientToServer, SocketServerToClient } from './V3Types.js';
 
+const forbiddenSendHeaders = [
+	'connection',
+	'content-length',
+	'transfer-encoding',
+];
+
 const forbiddenForwardHeaders: string[] = [
 	'connection',
 	'transfer-encoding',
 	'host',
-	'connection',
 	'origin',
 	'referer',
 ];
@@ -63,7 +68,7 @@ const cacheNotModified = 304;
 function loadForwardedHeaders(
 	forward: string[],
 	target: BareHeaders,
-	request: BareRequest
+	request: BareRequest,
 ) {
 	for (const header of forward) {
 		if (request.headers.has(header)) {
@@ -123,6 +128,8 @@ function readHeaders(request: BareRequest): BareHeaderData {
 		const json = JSON.parse(xBareHeaders) as Record<string, string | string[]>;
 
 		for (const header in json) {
+			if (forbiddenSendHeaders.includes(header.toLowerCase())) continue;
+
 			const value = json[header];
 
 			if (typeof value === 'string') {
@@ -249,7 +256,7 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		abort.signal,
 		sendHeaders,
 		remote,
-		options
+		options,
 	);
 
 	const responseHeaders = new Headers();
@@ -271,8 +278,8 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 			JSON.stringify(
 				mapHeadersFromArray(rawHeaderNames(response.rawHeaders), {
 					...(<BareHeaders>response.headers),
-				})
-			)
+				}),
+			),
 		);
 	}
 
@@ -281,7 +288,7 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		{
 			status,
 			headers: splitHeaders(responseHeaders),
-		}
+		},
 	);
 };
 
@@ -292,7 +299,7 @@ function readSocket(socket: WebSocket): Promise<SocketClientToServer> {
 
 			if (typeof event.data !== 'string')
 				return reject(
-					new TypeError('the first websocket message was not a text frame')
+					new TypeError('the first websocket message was not a text frame'),
 				);
 
 			try {
@@ -326,7 +333,7 @@ const tunnelSocket: SocketRouteCallback = async (
 	request,
 	socket,
 	head,
-	options
+	options,
 ) =>
 	options.wss.handleUpgrade(request.native, socket, head, async (client) => {
 		let _remoteSocket: WebSocket | undefined;
@@ -340,7 +347,7 @@ const tunnelSocket: SocketRouteCallback = async (
 			loadForwardedHeaders(
 				connectPacket.forwardHeaders,
 				connectPacket.headers,
-				request
+				request,
 			);
 
 			const [remoteReq, remoteSocket] = await webSocketFetch(
@@ -348,7 +355,7 @@ const tunnelSocket: SocketRouteCallback = async (
 				connectPacket.headers,
 				new URL(connectPacket.remote),
 				connectPacket.protocols,
-				options
+				options,
 			);
 
 			_remoteSocket = remoteSocket;
@@ -401,7 +408,7 @@ const tunnelSocket: SocketRouteCallback = async (
 
 						remoteSocket.close();
 					});
-				}
+				},
 			);
 		} catch (err) {
 			if (options.logErrors) console.error(err);

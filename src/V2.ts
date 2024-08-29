@@ -24,11 +24,16 @@ import { joinHeaders, splitHeaders } from './splitHeaderUtil.js';
 
 const validProtocols: string[] = ['http:', 'https:', 'ws:', 'wss:'];
 
+const forbiddenSendHeaders = [
+	'connection',
+	'content-length',
+	'transfer-encoding',
+];
+
 const forbiddenForwardHeaders: string[] = [
 	'connection',
 	'transfer-encoding',
 	'host',
-	'connection',
 	'origin',
 	'referer',
 ];
@@ -74,7 +79,7 @@ const cacheNotModified = 304;
 function loadForwardedHeaders(
 	forward: string[],
 	target: BareHeaders,
-	request: BareRequest
+	request: BareRequest,
 ) {
 	for (const header of forward) {
 		if (request.headers.has(header)) {
@@ -160,6 +165,8 @@ function readHeaders(request: BareRequest): BareHeaderData {
 		const json = JSON.parse(xBareHeaders) as Record<string, string | string[]>;
 
 		for (const header in json) {
+			if (forbiddenSendHeaders.includes(header.toLowerCase())) continue;
+
 			const value = json[header];
 
 			if (typeof value === 'string') {
@@ -285,7 +292,7 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		abort.signal,
 		sendHeaders,
 		remote,
-		options
+		options,
 	);
 
 	const responseHeaders = new Headers();
@@ -307,8 +314,8 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 			JSON.stringify(
 				mapHeadersFromArray(rawHeaderNames(response.rawHeaders), {
 					...(<BareHeaders>response.headers),
-				})
-			)
+				}),
+			),
 		);
 	}
 
@@ -317,7 +324,7 @@ const tunnelRequest: RouteCallback = async (request, res, options) => {
 		{
 			status,
 			headers: splitHeaders(responseHeaders),
-		}
+		},
 	);
 };
 
@@ -361,7 +368,7 @@ const getMeta: RouteCallback = async (request, res, options) => {
 	responseHeaders.set('x-bare-status-text', meta.value.response.statusText);
 	responseHeaders.set(
 		'x-bare-headers',
-		JSON.stringify(meta.value.response.headers)
+		JSON.stringify(meta.value.response.headers),
 	);
 
 	return new Response(undefined, {
@@ -392,7 +399,7 @@ const tunnelSocket: SocketRouteCallback = async (
 	request,
 	socket,
 	head,
-	options
+	options,
 ) => {
 	const abort = new AbortController();
 
@@ -420,7 +427,7 @@ const tunnelSocket: SocketRouteCallback = async (
 	loadForwardedHeaders(
 		meta.value.forwardHeaders,
 		meta.value.sendHeaders,
-		request
+		request,
 	);
 
 	const [remoteResponse, remoteSocket] = await bareUpgradeFetch(
@@ -428,7 +435,7 @@ const tunnelSocket: SocketRouteCallback = async (
 		abort.signal,
 		meta.value.sendHeaders,
 		new URL(meta.value.remote),
-		options
+		options,
 	);
 
 	remoteSocket.on('close', () => {
@@ -477,14 +484,14 @@ const tunnelSocket: SocketRouteCallback = async (
 	if (remoteHeaders.has('sec-websocket-extensions')) {
 		responseHeaders.push(
 			`Sec-WebSocket-Extensions: ${remoteHeaders.get(
-				'sec-websocket-extensions'
-			)}`
+				'sec-websocket-extensions',
+			)}`,
 		);
 	}
 
 	if (remoteHeaders.has('sec-websocket-accept')) {
 		responseHeaders.push(
-			`Sec-WebSocket-Accept: ${remoteHeaders.get('sec-websocket-accept')}`
+			`Sec-WebSocket-Accept: ${remoteHeaders.get('sec-websocket-accept')}`,
 		);
 	}
 
